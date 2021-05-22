@@ -1,6 +1,5 @@
 # - Libraries ---- 
 library(tidyverse)
-library(janitor)
 library(lubridate)
 library(tidytext)
 library(tidymodels)
@@ -15,7 +14,7 @@ library(skimr)
 
 
 # - Import Data ----
-df <- read_csv("superstore_sales_dataset_predict_sales_using_time_series/data/train.csv")
+df <- read_csv("superstore/data/train.csv")
 
 # - Exploratory Data Analysis ----
 
@@ -27,17 +26,21 @@ tail(df, n = 20) # looks like `Order Date` format is dmy
 str(df)
 # only orders in the United States, don't need individual order_ids or ship_mode
 
-data_clean_tbl <- clean_names(df) %>% 
+data_clean_tbl <- janitor::clean_names(df) %>% 
                   as_tibble() %>% 
                   mutate(order_date = dmy(order_date),
-                         across(customer_id:product_name, .fns = as.factor)) %>% 
+                         across(customer_id:product_name, 
+                                .fns = as.factor)) %>% 
                   select(-c(ship_date, country, order_id, ship_mode))
 
 glimpse(data_clean_tbl)
 
 # What period of time does this data cover?
-(t <- summarise_by_time(.data = data_clean_tbl, .date_var = order_date))
-(diff_t <- difftime(last(t$order_date), first(t$order_date), units = 'weeks'))            
+(t <- summarise_by_time(.data     = data_clean_tbl, 
+                        .date_var = order_date))
+(diff_t <- difftime(last(t$order_date), 
+                    first(t$order_date), 
+                    units = 'weeks'))            
 dweeks(208.1429)
 as.period(diff_t)
 # So this data is from a timespan of 4 years.  2015-01-03 to 2018-12-30.  There are gaps.  
@@ -53,25 +56,30 @@ q <- data_clean_tbl %>%
    
 # **Plot: Orders by State/Region ----
 ggplot(q, aes(reorder_within(state, orders, region, sep = ""), orders, fill = region)) + 
-   geom_col(show.legend = FALSE, alpha = 0.9) +
+   geom_col(show.legend = FALSE, alpha       = 0.9) +
    facet_grid(region ~., scales = 'free', space = 'free') +
    coord_flip() +
    scale_x_reordered() +  # gets rid of the ___region 
    scale_y_continuous(limits = c(0,2000), expand = c(0,0)) +
    theme_dark_grey() + 
-   scale_color_todd_dark() + 
-   scale_fill_todd_dark() +
+   scale_color_todd_dark_subtle() + 
+   scale_fill_todd_dark_subtle() +
    theme(panel.grid.major.y = element_blank(),
          panel.grid.major.x = element_blank()) +
-   geom_hline(yintercept = 500, color = colorsPuYe[4], alpha = 0.1, size = 1) +
-   geom_hline(yintercept = 1000, color = colorsPuYe[4], alpha = 0.1, size = 1) +
-   geom_hline(yintercept = 1500, color = colorsPuYe[4], alpha = 0.1, size = 1) +
-   labs(x = element_blank(), title = 'Orders by State/Region') +
+   geom_hline(yintercept = c(500,1000,1500), 
+              color      = "#FFCF6A", 
+              alpha      = 0.1, 
+              size       = 1) +
+   labs(x     = element_blank(), 
+        title = 'Orders by State/Region') +
    geom_text(aes(label = orders), 
-             color="white", size=3.5, fontface = 'bold', 
-             hjust = -0.2, vjust = 0.4)
+             color    = "white", 
+             size     = 3.5, 
+             fontface = 'bold', 
+             hjust    = -0.2, 
+             vjust    = 0.4)
    
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/orders_by_state_region.jpeg",
+ggsave(here::here("superstore", "charts","orders_by_state_region.jpeg"),
        width = 18.5, height = 12.5)
 
 # **Plot: Sales by State/Region ----
@@ -82,20 +90,20 @@ ggplot(q, aes(reorder_within(state, sales, region, sep = ""), sales, fill = regi
    scale_x_reordered() +  # gets rid of the ___region 
    scale_y_continuous(limits = c(0,500000), expand = c(0,0), labels=dollar_format(prefix="$")) +
    theme_dark_grey() + 
-   scale_color_todd_dark() + 
-   scale_fill_todd_dark() +
+   scale_color_todd_dark_subtle() + 
+   scale_fill_todd_dark_subtle() +
    theme(panel.grid.major.y = element_blank(),
          panel.grid.major.x = element_blank()) +
-   geom_hline(yintercept = 100000, color = colorsPuYe[4], alpha = 0.1, size = 1) +
-   geom_hline(yintercept = 200000, color = colorsPuYe[4], alpha = 0.1, size = 1) +
-   geom_hline(yintercept = 300000, color = colorsPuYe[4], alpha = 0.1, size = 1) +
-   geom_hline(yintercept = 400000, color = colorsPuYe[4], alpha = 0.1, size = 1) +
+   geom_hline(yintercept = c(100000,200000,300000,400000), 
+              color      = "#FFCF6A", 
+              alpha      = 0.1, 
+              size       = 1) +
    labs(x = element_blank(), title = 'Sales by State/Region') +
    geom_text(aes(label = dollar(round((sales)))), 
              color="white", size=3.5, fontface = 'bold', 
              hjust = -0.1, vjust = 0.4)
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/sales_by_state_region2.jpeg",
+ggsave(here::here("superstore","charts","sales_by_state_region.jpeg"),
        width = 18.5, height = 12.5)
 
 
@@ -109,17 +117,21 @@ glimpse(data_clean_tbl)
 # Want to identify any outlier customers, and see if any category/segment of their business dominates
 (x <- data_clean_tbl %>% 
       group_by(customer_name, category, segment) %>% 
-      summarise(sales = sum(sales), orders = n()) %>% 
+      summarise(sales  = sum(sales), 
+                orders = n()) %>% 
       mutate(log_sales = log(sales)))
 
 (z <- data_clean_tbl %>% 
       group_by(category, segment) %>% 
-      summarise(sales = sum(sales), orders = n()) %>% 
+      summarise(sales  = sum(sales), 
+                orders = n()) %>% 
       ungroup() %>% 
-      mutate(orders_pct = round(prop.table(orders)*100),
-             sales_pct  = round(prop.table(sales)*100),
+      mutate(orders_pct      = round(prop.table(orders) * 100),
+             sales_pct       = round(prop.table(sales) * 100),
              sales_per_order = round(sales/orders)) %>% 
-      pivot_longer(orders_pct:sales_pct, names_to = 'metric', values_to = 'percent'))
+      pivot_longer(orders_pct:sales_pct, 
+                   names_to  = 'metric', 
+                   values_to = 'percent'))
 # Easy to see how orders and sales differ by category.
 
 # **Plot: Order & Sale Percentage by Category/Segment ----
@@ -127,44 +139,63 @@ ggplot(z, aes(category, percent, fill = segment)) +
    geom_col(position = position_dodge(width = 0.8)) +
    theme_dark_grey() +
    scale_fill_manual(values = c("#fbb4ae", "#b3cde3", "#fed9a6")) +
-   facet_grid(~ metric, labeller = as_labeller(c( orders_pct = "% of Orders" , sales_pct = "% of Sales"))) +
+   facet_grid(~ metric, labeller = as_labeller(c(orders_pct = "% of Orders", 
+                                                 sales_pct  = "% of Sales"))) +
    geom_text(aes(category, percent, label = paste0(percent, "%")), 
-             color="white", size=4, fontface = 'bold', 
-             vjust = -0.5, position = position_dodge(width = 0.8)) +
+             color    = "white", 
+             size     = 4, 
+             fontface = 'bold', 
+             vjust    = -0.5, 
+             position = position_dodge(width = 0.8)) +
    labs(title = "Order & Sale Percentage by Category/Segment",
-        x = element_blank()) 
+        x     = element_blank()) 
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/orders&sale_pct_by_category_segment.jpeg",
-       width = 14.5, height = 8.5)
+ggsave(here::here("superstore","charts","orders&sale_pct_by_category_segment.jpeg"),
+       width = 14.5, height = 10.5)
 
 
-(outlier_furniture_consumer <- x %>% filter(segment == 'Consumer', category == "Furniture") %>% 
-                                     arrange(desc(orders)) %>% head(n = 1)) 
+
+(outlier_furniture_consumer <- x %>% filter(segment  == 'Consumer', 
+                                            category == "Furniture") %>% 
+                                     arrange(desc(orders)) %>% head()) 
 
 (outlier_technology_corporate_homeoffice <- x %>% 
                                            filter(segment  == 'Corporate' | segment == "Home Office",
                                                   category == "Technology") %>% 
-                                           arrange(desc(log_sales)) %>% head(n = 3))   
-
-seth_vernon <- data.frame(category = factor("Furniture",levels=c("Furniture","Office Supplies","Technology")),
-                          segment  = factor("Consumer",levels=c("Consumer","Corporate","Home Office")))
+                                           arrange(desc(log_sales)) %>% head())   
+# Make specific tbl for outlier Seth Vernon so label doesn't appear in other facets
+seth_vernon <- data.frame(category = factor("Furniture", levels = c("Furniture","Office Supplies","Technology")),
+                          segment  = factor("Consumer", levels = c("Consumer","Corporate","Home Office")))
 
 # **Plot: Orders & Sales in log($) per Customer by Category/Segment ----
 ggplot(x, aes(log(sales), orders, color = category)) +
    geom_jitter(aes(shape = segment), 
-               alpha = 0.7, width = 0, height = 0.3, show.legend = FALSE, size = 2) +
+               alpha       = 0.7, 
+               width       = 0, 
+               height      = 0.3, 
+               show.legend = FALSE, 
+               size        = 2) +
    theme_dark_grey() +
    scale_color_manual(values = c("#fbb4ae", "#b3cde3", "#fed9a6")) +   
    facet_grid(segment~category, scales = 'free_y') +
    labs(title = "Orders & Sales in log($) per Customer by Category/Segment", 
-        x = 'log($)') +
-   geom_curve(data = seth_vernon, aes(x = 7, xend = 8.9, y = 18, yend = 16), 
-              curvature = -0.5, size = 1, arrow = arrow(length = unit(2, "mm")), 
-              color = 'white', alpha = 0.7) +
-   geom_text(data=seth_vernon ,aes(x=6.5,y=15), 
-             label="Seth Vernon\n15 Orders\nTotal = $8,332",size=3.5, show.legend = F, color = 'white', alpha = 0.7)
+        x     = 'log($)') +
+   geom_curve(aes(x = 7, xend = 8.9, y = 18, yend = 16),
+              data      = seth_vernon, 
+              curvature = -0.5, 
+              size      = 1, 
+              arrow     = arrow(length = unit(2, "mm")), 
+              color     = 'white', 
+              alpha     = 0.7) +
+   geom_text(aes(x = 6.5, y = 15), 
+             data        = seth_vernon ,
+             label       = "Seth Vernon\n15 Orders\nTotal = $8,332",
+             size        = 3.5, 
+             show.legend = F, 
+             color       = 'white', 
+             alpha       = 0.7)
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/orders&sales_per_customer_by_category_segment.jpeg",
+ggsave(here::here("superstore","charts","orders&sales_per_customer_by_category_segment.jpeg"),
        width = 16, height = 10)
 
 # Outliers aren't that extreme.   
@@ -176,22 +207,23 @@ ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/orders&s
 data_clean_tbl
 
 sales_daily_tbl <- data_clean_tbl %>% 
-   summarise_by_time(.date_var = order_date, 
-                     .by = 'day', 
-                     sales = sum(sales))
-
+                   summarise_by_time(.date_var = order_date, 
+                                     .by       = 'day', 
+                                     sales     = sum(sales))
 
 # **Plot: DAILY TOTAL SALES ----
 sales_daily_tbl %>% 
-   plot_time_series(order_date, sales, .interactive = FALSE,
-                    .line_color = "#fbb4ae", .smooth_color = "#59bec4",
-                    .title = "Daily Total Sales",
-                    .y_lab = "$") +
-   theme_dark_grey() + 
-   scale_color_todd_dark()
+   plot_time_series(.date_var     = order_date, 
+                    .value        = sales, 
+                    .interactive  = FALSE,
+                    .line_color   = "#decbe4", 
+                    .smooth_color = "#ffffcc",
+                    .title        = "Daily Total Sales",
+                    .y_lab        = "$") +
+   theme_dark_grey() 
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/daily_total_sales.jpeg",
-       width = 16, height = 10)
+ggsave(here::here("superstore","charts","daily_total_sales.jpeg"),
+       width = 16, height = 6)
 
 # -MISSING DATA ----
 
@@ -204,7 +236,7 @@ sales_daily_tbl %>%
 
 sales_daily_pad_tbl <- sales_daily_tbl %>% 
                        pad_by_time(order_date, 
-                                   .by = 'day', 
+                                   .by        = 'day', 
                                    .pad_value = 0) 
 # 1230 rows to 1458 rows. Added 228 rows with 0 sales
 1458/365 
@@ -220,9 +252,11 @@ sales_daily_pad_tbl <- sales_daily_tbl %>%
 #   - Then standardize to mean 0, std-dev 1: `standardize_vec()`
 
 sales_daily_pad_trans_tbl <- sales_daily_pad_tbl %>%
-   mutate(sales = log_interval_vec(sales, limit_lower = 0, offset = 1)) %>%
-   mutate(sales = standardize_vec(sales)) %>%
-   rename(sales_trans = sales)
+                             mutate(sales = log_interval_vec(sales, 
+                                                             limit_lower = 0, 
+                                                             offset      = 1)) %>%
+                             mutate(sales = standardize_vec(sales)) %>%
+                             rename(sales_trans = sales)
 # We need to keep track of the Standardization Parameters for when we un-transform the data later on.
 
 # *STANDARDIZATION PARAMETERS ----
@@ -239,15 +273,14 @@ sales_daily_pad_trans_tbl %>%
    plot_time_series(order_date, 
                     sales_trans, 
                     .interactive  = FALSE,
-                    .line_color   = "#fbb4ae", 
-                    .smooth_color = "#59bec4",
+                    .line_color   = "#decbe4", 
+                    .smooth_color = "#ffffcc",
                     .title        = "Daily Total Sales, Padded & Transformed",
-                    .y_lab        = "Sales")+
-   theme_dark_grey() + 
-   scale_color_todd_dark()
-   
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/daily_sales_pad_trans.jpeg",
-       width = 16, height = 10)
+                    .y_lab        = "Sales") +
+   theme_dark_grey()  
+
+ggsave(here::here("superstore","charts","daily_sales_pad_trans.jpeg"),
+       width = 16, height = 6)
 
 # -FOURIER SERIES, LAGS, ROLLING LAGS ----
 
@@ -258,15 +291,18 @@ sales_daily_pad_trans_tbl %>%
                         .line_size = 0.5, .white_noise_line_color = "red", .point_color = "#fed9a6",
                         .point_size = 0.8) +
    theme_dark_grey() + 
-   scale_color_todd_dark() +
-   geom_text(x = c(7, 14, 21.7, 29.5, 358, 7, 15, 22, 30),
-             y = c(.53, .52, .5, .5, .38,.5, .35, .27, .25), 
-             size = 4, color = "white", data = lag_labels, aes(label = label), angle = 55)
+   geom_text(aes(label = label),
+             data  = lag_labels, 
+             x     = c(7, 14, 21.7, 29.5, 358, 7, 15, 22, 30),
+             y     = c(.53, .52, .5, .5, .38,.5, .35, .27, .25), 
+             size  = 4, 
+             color = "white", 
+             angle = 55)
 
-lag_labels <- data.frame(name = c("ACF","ACF","ACF","ACF","ACF","PACF","PACF","PACF","PACF"), 
+lag_labels <- data.frame(name  = c("ACF","ACF","ACF","ACF","ACF","PACF","PACF","PACF","PACF"), 
                          label = c('7','14','21','28','357','7','14','21','28'))
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/acf_pacf.jpeg",
+ggsave(here::here("superstore","charts","acf_pacf2.jpeg"),
        width = 16, height = 10)
 
 # Clearly there is a strong weekly correlation of sales vs sales 7d, 14d, 21d, ... later.   
@@ -281,8 +317,8 @@ ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/acf_pacf
 
 # Forecast the next 3 months of sales, or 90 days.
 forecast_3_month <- 84
-lag_period <- c(7, 14, 21, 84) # 84 smallest lag period to get our forecast of 3 months into the future
-rolling_periods <- c(14, 30, 60, 90) # incorporates 1 week, 1 month, 2 month, and 3 month moving averages as features to catch the trend
+lag_period <- 84 # 84 smallest lag period to get our forecast of 3 months into the future
+rolling_periods <- c(30, 60, 90) # incorporates 1 week, 1 month, 2 month, and 3 month moving averages as features to catch the trend
 
 # ** Full Tbl ----
 full_data_prepared_tbl <- sales_daily_pad_trans_tbl %>% 
@@ -290,7 +326,7 @@ full_data_prepared_tbl <- sales_daily_pad_trans_tbl %>%
                                        .length_out = forecast_3_month, 
                                        .bind_data  = TRUE) %>% 
                           tk_augment_fourier(.date_var = order_date,
-                                             .periods  = c(7,14,21),
+                                             .periods  = c(7,14,21,28,357),
                                              .K        = 3) %>% 
                           tk_augment_lags(.value = sales_trans,
                                           .lags  = lag_period ) %>% 
@@ -306,16 +342,18 @@ full_data_prepared_tbl <- sales_daily_pad_trans_tbl %>%
                                       .fn   = ~ str_c('fourier_', .))
 
 full_data_prepared_tbl %>% 
-   write_rds("superstore_sales_dataset_predict_sales_using_time_series/data/full_data_prepared_tbl.rds")
+   write_rds("superstore/data/full_data_prepared_tbl.rds")
 
-full_data_prepared_tbl <- read_rds("superstore_sales_dataset_predict_sales_using_time_series/data/full_data_prepared_tbl.rds")
+full_data_prepared_tbl <- read_rds("superstore/data/full_data_prepared_tbl.rds")
 
 glimpse(full_data_prepared_tbl)
 
 full_data_prepared_tbl %>% 
-   pivot_longer(c(sales_trans, lag_sales_trans_lag84, lag_sales_trans_lag84_roll_14,
+   pivot_longer(c(sales_trans, 
+                  lag_sales_trans_lag84,
                   lag_sales_trans_lag84_roll_30,
-                  lag_sales_trans_lag84_roll_60, lag_sales_trans_lag84_roll_90)) %>% 
+                  lag_sales_trans_lag84_roll_60, 
+                  lag_sales_trans_lag84_roll_90)) %>% 
    plot_time_series(order_date, value, name, .smooth = FALSE)
 
 # Full dataset should have NAs for the future forecast of sales_trans, orders_trans, and the lags, rolling lags     
@@ -323,15 +361,13 @@ skimr::skim(full_data_prepared_tbl)
 
 # ** Forecast Tbl ----
 forecast_tbl <- full_data_prepared_tbl %>% 
-   filter(is.na(sales_trans))
+                filter(is.na(sales_trans))
 
-skimr::skim(forecast_tbl)
+skimr::skim(forecast_tbl) # 84 rows, 37 columns.  84 rows with missing data.  Good to go.  
 
-forecast_tbl <- forecast_tbl %>% 
-   mutate(across(.cols = lag_sales_trans_lag7:lag_sales_trans_lag21,
-                 .fns  = ~ ifelse(is.na(.x), lag_sales_trans_lag84_roll_14, .x)))
-
-skim(forecast_tbl) # 84 rows, 29 columns.  84 rows with missing data.  Good to go.  
+# forecast_tbl <- forecast_tbl %>% 
+#                 mutate(across(.cols = lag_sales_trans_lag7:lag_sales_trans_lag21,
+#                               .fns  = ~ ifelse(is.na(.x), lag_sales_trans_lag84_roll_14, .x)))
 
 # ** Prepared Tbl ----
 
@@ -339,8 +375,7 @@ data_prepared_tbl <- full_data_prepared_tbl %>%
                      filter(!is.na(sales_trans)) %>% 
                      drop_na()
 
-
-skim(data_prepared_tbl) # 1374 rows, 29 columns, no missing data.  Good to go.  
+skim(data_prepared_tbl) # 1374 rows, 37 columns, no missing data.  Good to go.  
    
 
 # * SPLITS - TRAINING/TESTING ----
@@ -348,21 +383,22 @@ skim(data_prepared_tbl) # 1374 rows, 29 columns, no missing data.  Good to go.
 # Lets split training/testing so we're testing on the last quarter. 3 months or 90 days. 
 356/4
 splits <- data_prepared_tbl %>% 
-   time_series_split(date_var   = order_date,
-                     assess     = 84,
-                     cumulative = TRUE)
+          time_series_split(date_var   = order_date,
+                            assess     = 84,
+                            cumulative = TRUE)
 splits %>% 
    tk_time_series_cv_plan() %>% 
-   plot_time_series_cv_plan(.date_var = order_date, .value = sales_trans, .smooth = FALSE,
+   plot_time_series_cv_plan(.date_var    = order_date, 
+                            .value       = sales_trans, 
+                            .smooth      = FALSE,
                             .interactive = FALSE,
-                            .title = "Initial Cross Validation Plan",
-                            .y_lab = "Sales") +
+                            .title       = "Initial Cross Validation Plan",
+                            .y_lab       = "Sales") +
    theme_dark_grey() + 
-   scale_color_todd_dark()
+   scale_color_todd_dark_subtle()
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/cv_splits.jpeg",
+ggsave(here::here("superstore","charts","cv_splits.jpeg"),
        width = 16, height = 10)
-
 
 
 # -RECIPES ----
@@ -371,16 +407,31 @@ recipe_spec <- recipe(sales_trans ~ ., data = training(splits)) %>%
                step_timeseries_signature(order_date) %>% 
                update_role(rowid, new_role = 'indicator') %>% 
                step_rm(matches("(.iso)|(xts)|(hour)|(minute)|(second)|(am.pm)")) %>% 
-               step_normalize(matches('(index.num)|(year)|(yday)|(qday)|(mday)|(date_day)|(date_week)')) %>% 
+               step_normalize(matches('(index.num)|(year)|(yday)|(qday)|(mday)|(date_day)')) %>% 
                step_dummy(all_nominal(), one_hot = TRUE) %>% 
                step_holiday(order_date, holidays = timeDate::listHolidays("US")) 
    
 recipe_spec %>% prep() %>% juice() %>% glimpse()
 
-recipe_spec %>% 
-   write_rds("superstore_sales_dataset_predict_sales_using_time_series/data/recipe_spec.rds")
+glimpse(training(splits))
+recipe_spec_no_f <- recipe(sales_trans ~ order_date 
+                           + lag_sales_trans_lag84
+                           + lag_sales_trans_lag84_roll_30
+                           + lag_sales_trans_lag84_roll_60
+                           + lag_sales_trans_lag84_roll_90, 
+                           data = training(splits)) %>% 
+   step_timeseries_signature(order_date) %>% 
+   step_rm(matches("(.iso)|(xts)|(hour)|(minute)|(second)|(am.pm)")) %>% 
+   step_normalize(matches('(index.num)|(year)|(yday)|(qday)|(mday)|(date_day)')) %>% 
+   step_dummy(all_nominal(), one_hot = TRUE) %>% 
+   step_holiday(order_date, holidays = timeDate::listHolidays("US")) 
 
-recipe_spec <- read_rds("superstore_sales_dataset_predict_sales_using_time_series/data/recipe_spec.rds")
+recipe_spec_no_f %>% prep() %>% juice() %>% glimpse()
+
+recipe_spec %>% 
+   write_rds(here::here("superstore","data","recipe_spec.rds"))
+
+#recipe_spec <- read_rds("superstore/data/recipe_spec.rds")
 
 # -Models ----
 
@@ -388,13 +439,12 @@ recipe_spec <- read_rds("superstore_sales_dataset_predict_sales_using_time_serie
 # 4 non-sequential models: Prophet, XGBoost, Prophet_boost, Random Forest 
 
 # * ARIMA ----
-
 library(doFuture)
-doFuture::registerDoFuture()
+registerDoFuture()
 n_cores <- parallel::detectCores()
 plan(strategy = cluster,
      workers  = parallel::makeCluster(n_cores))
-
+plan(sequential)
 
 # model_fit_1_arima_basic <- arima_reg() %>% 
 #    set_engine('auto_arima') %>% 
@@ -422,121 +472,31 @@ plan(strategy = cluster,
 # 
 # model_fit_3_arima_xreg_fourier
 
-model_fit_4_arima_xreg_fourier <-  arima_reg() %>% 
+model_fit_arima <-  arima_reg() %>% 
    set_engine('auto_arima') %>% 
-   fit(sales_trans ~ order_date + orders_trans 
-       + fourier_vec(order_date, period = 7)
-       + fourier_vec(order_date, period = 14)
-       + fourier_vec(order_date, period = 30)
-       + fourier_vec(order_date, period = 90),
+   fit(sales_trans ~ order_date,
        data = training(splits))
 
-model_fit_4_arima_xreg_fourier
+model_fit_arima
 
-# model_fit_5_arima_xreg_fourier <-  arima_reg() %>% 
-#    set_engine('auto_arima') %>% 
-#    fit(sales_trans ~ order_date + orders_trans 
-#        + fourier_vec(order_date, period = 7)
-#        + fourier_vec(order_date, period = 30)
-#        + fourier_vec(order_date, period = 90),
-#        data = training(splits))
-# 
-# model_fit_5_arima_xreg_fourier
-# 
-# model_fit_6_arima_xreg_fourier <-  arima_reg() %>% 
-#    set_engine('auto_arima') %>% 
-#    fit(sales_trans ~ order_date + orders_trans 
-#        + fourier_vec(order_date, period = 7)
-#        + fourier_vec(order_date, period = 14)
-#        + fourier_vec(order_date, period = 30)
-#        + fourier_vec(order_date, period = 90)
-#        + fourier_vec(order_date, period = 365),
-#        data = training(splits))
-# 
-# calibration_tbl <- modeltime_table(model_fit_1_arima_basic,
-#                                    model_fit_2_arima_xregs,
-#                                    model_fit_3_arima_xreg_fourier, 
-#                                    model_fit_4_arima_xreg_fourier, 
-#                                    model_fit_5_arima_xreg_fourier, 
-#                                    model_fit_6_arima_xreg_fourier
-#                                    ) %>% 
+
+# calibration_tbl <- modeltime_table(model_fit_arima,
+#                                    model_fit_arima_fourier_1,
+#                                    model_fit_arima_fourier_2,
+#                                    model_fit_arima_fourier_3) %>%
 #    modeltime_calibrate(testing(splits))
-# 
-# calibration_tbl %>% 
+#  
+# calibration_tbl %>%
 #    modeltime_forecast(new_data = testing(splits),
-#                       actual_data = data_prepared_tbl) %>% 
+#                       actual_data = data_prepared_tbl) %>%
 #    plot_modeltime_forecast(.conf_interval_fill = 1, .legend_max_width = 5)
 # 
 # calibration_tbl %>% modeltime_accuracy()
 
 # Let's move ahead with model_fit_4_arima_xreg_fourier as model_fit_arima
-model_fit_arima <- model_fit_4_arima_xreg_fourier
+#model_fit_arima <- model_fit_arima_fourier
 
 
-# * PROPHET ----
-
-
-# model_fit_1_prophet_basic <- prophet_reg() %>% 
-#    set_engine("prophet") %>% 
-#    fit(sales_trans ~ order_date, data = training(splits))
-# 
-# model_fit_1_prophet_basic
-# 
-# model_fit_2_prophet_weekly <- prophet_reg(seasonality_weekly = TRUE) %>% 
-#    set_engine("prophet") %>% 
-#    fit(sales_trans ~ order_date, data = training(splits))
-# 
-# model_fit_2_prophet_weekly
-#    
-# model_fit_3_prophet_weekly_yearly <- prophet_reg(seasonality_weekly = TRUE,
-#                                                  seasonality_yearly = TRUE) %>% 
-#    set_engine("prophet") %>% 
-#    fit(sales_trans ~ order_date, data = training(splits))
-# 
-# model_fit_3_prophet_weekly_yearly
-# 
-# 
-# model_fit_4_prophet_weekly_yearly_daily<- prophet_reg(seasonality_weekly = TRUE,
-#                                                       seasonality_yearly = TRUE,
-#                                                       seasonality_daily  = TRUE) %>% 
-#    set_engine("prophet") %>% 
-#    fit(sales_trans ~ order_date, data = training(splits))
-# 
-# model_fit_4_prophet_weekly_yearly_daily
-
-model_fit_5_prophet_xregs <- prophet_reg() %>% 
-   set_engine("prophet") %>% 
-   fit(sales_trans ~ order_date + orders_trans, data = training(splits))
-
-model_fit_5_prophet_xregs
-
-# model_fit_6_prophet_xregs_fourier <- prophet_reg() %>% 
-#    set_engine("prophet") %>% 
-#    fit(sales_trans ~ order_date 
-#        + orders_trans 
-#        + fourier_vec(order_date, period = 7)
-#        + fourier_vec(order_date, period = 30),
-#        data = training(splits))
-# 
-# model_fit_6_prophet_xregs_fourier
-# 
-# calibration_tbl <- modeltime_table(model_fit_arima,
-#                                    model_fit_1_prophet_basic,
-#                                    model_fit_2_prophet_weekly, 
-#                                    model_fit_4_prophet_weekly_yearly_daily,
-#                                    model_fit_5_prophet_xregs,
-#                                    model_fit_6_prophet_xregs_fourier) %>% 
-#    modeltime_calibrate(testing(splits))
-# 
-# calibration_tbl %>% 
-#    modeltime_forecast(new_data = testing(splits),
-#                       actual_data = data_prepared_tbl) %>% 
-#    plot_modeltime_forecast(.conf_interval_alpha = 0.2, .legend_max_width = 15)
-# 
-# calibration_tbl %>% modeltime_accuracy()
-
-# Let's move ahead with model_fit_5_prophet_xregs as model_fit_prophet
-model_fit_prophet <- model_fit_5_prophet_xregs
 
 # - WORKFLOWS ----
 
@@ -547,6 +507,13 @@ wflw_fit_prophet <- workflow() %>%
                set_engine('prophet')) %>% 
    add_recipe(recipe_spec) %>% 
    fit(training(splits))
+
+wflw_fit_prophet2 <- workflow() %>% 
+   add_model(spec = prophet_reg() %>% 
+                set_engine('prophet')) %>% 
+   add_recipe(recipe_spec_no_f) %>% 
+   fit(training(splits))
+
 
 
 # * XGBOOST ----
@@ -559,16 +526,40 @@ wflw_fit_xgboost <- workflow() %>%
                  update_role(order_date, new_role = 'indicator')) %>% 
    fit(training(splits))
 
+# * ARIMA BOOST ----
+# Keep date/dttm feature
+
+wflw_fit_arimaboost <- workflow() %>% 
+   add_model(spec = arima_boost() %>% 
+                set_engine('auto_arima_xgboost')) %>% 
+   add_recipe(recipe_spec) %>% 
+   fit(training(splits))
+
+wflw_fit_arimaboost2 <- workflow() %>% 
+   add_model(spec = arima_boost() %>% 
+                set_engine('auto_arima_xgboost')) %>% 
+   add_recipe(recipe_spec_no_f) %>% 
+   fit(training(splits))
+
 # * PROPHET BOOST ----
 
 # Keep date/dttm feature
 wflw_fit_prophet_xgboost <- workflow() %>% 
-   add_model(spec = prophet_boost(seasonality_daily = FALSE,
+   add_model(spec = prophet_boost(seasonality_daily  = FALSE,
                                   seasonality_weekly = FALSE,
                                   seasonality_yearly = FALSE) %>% 
                 set_engine('prophet_xgboost')) %>% 
    add_recipe(recipe_spec) %>% 
    fit(training(splits))
+
+wflw_fit_prophet_xgboost2 <- workflow() %>% 
+   add_model(spec = prophet_boost(seasonality_daily  = FALSE,
+                                  seasonality_weekly = FALSE,
+                                  seasonality_yearly = FALSE) %>% 
+                set_engine('prophet_xgboost')) %>% 
+   add_recipe(recipe_spec_no_f) %>% 
+   fit(training(splits))
+
 # turned Prophet seasonalities off so prophet is only used for trend
 # XGBoost will model seasonality with the Prophet Model's residuals using the 
 # calandar features from the recipe spec
@@ -584,6 +575,13 @@ wflw_fit_svm <- workflow() %>%
                  update_role(order_date, new_role = 'indicator')) %>% 
    fit(training(splits))
 
+wflw_fit_svm2 <- workflow() %>% 
+   add_model(spec = svm_rbf(mode = 'regression') %>% 
+                set_engine('kernlab')) %>% 
+   add_recipe(recipe_spec_no_f %>% 
+                 update_role(order_date, new_role = 'indicator')) %>% 
+   fit(training(splits))
+
 
 # * RANDOM FOREST ----
 
@@ -594,6 +592,14 @@ wflw_fit_rf <- workflow() %>%
    add_recipe(recipe_spec %>% 
                  update_role(order_date, new_role = 'indicator')) %>% 
    fit(training(splits))
+
+wflw_fit_rf2 <- workflow() %>% 
+   add_model(spec = rand_forest(mode = 'regression') %>% 
+                set_engine('ranger')) %>% 
+   add_recipe(recipe_spec_no_f %>% 
+                 update_role(order_date, new_role = 'indicator')) %>% 
+   fit(training(splits))
+
 
 
 # * NNET ----
@@ -606,6 +612,12 @@ wflw_fit_nnet <- workflow() %>%
                  update_role(order_date, new_role = 'indicator')) %>% 
    fit(training(splits))
 
+wflw_fit_nnet2 <- workflow() %>% 
+   add_model(spec = mlp(mode = 'regression') %>% 
+                set_engine('nnet')) %>% 
+   add_recipe(recipe_spec_no_f %>% 
+                 update_role(order_date, new_role = 'indicator')) %>% 
+   fit(training(splits))
 
 # * MARS ----
 
@@ -619,49 +631,128 @@ wflw_fit_mars <- workflow() %>%
                  update_role(order_date, new_role = 'indicator')) %>% 
    fit(training(splits))
 
+wflw_fit_mars2 <- workflow() %>% 
+   add_model(spec = mars(mode = 'regression') %>% 
+                set_engine('earth')) %>% 
+   add_recipe(recipe_spec_no_f %>% 
+                 update_role(order_date, new_role = 'indicator')) %>% 
+   fit(training(splits))
+
+
+# * GLMNET ----
+
+# ML model.  Change date/dttm feature to 'indicator'
+wflw_fit_glmnet <- workflow() %>% 
+   add_model(spec = linear_reg(mode = 'regression',
+                               penalty = 0.1,
+                               mixture = 0.5) %>% 
+                set_engine('glmnet')) %>% 
+   add_recipe(recipe_spec %>% 
+                 update_role(order_date, new_role = 'indicator')) %>% 
+   fit(training(splits))
+
+wflw_fit_glmnet2 <- workflow() %>% 
+   add_model(spec = linear_reg(mode = 'regression',
+                               penalty = 0.1,
+                               mixture = 0.5) %>% 
+                set_engine('glmnet')) %>% 
+   add_recipe(recipe_spec_no_f %>% 
+                 update_role(order_date, new_role = 'indicator')) %>% 
+   fit(training(splits))
+
+# * NNETAR ----
+
+# Multiple Adaptive Regression Splines
+
+wflw_fit_nnetar <- workflow() %>% 
+   add_model(nnetar_reg() %>% 
+                set_engine('nnetar')) %>% 
+   add_recipe(recipe_spec) %>% 
+   fit(training(splits))
+
+wflw_fit_nnetar2 <- workflow() %>% 
+   add_model(nnetar_reg() %>% 
+                set_engine('nnetar')) %>% 
+   add_recipe(recipe_spec_no_f) %>% 
+   fit(training(splits))
+
+
+
 submodels_tbl <- modeltime_table(model_fit_arima,
-                                 model_fit_prophet,
                                  wflw_fit_prophet,
-                                 wflw_fit_xgboost,
+                                 wflw_fit_prophet2,
+                                 wflw_fit_arimaboost,
+                                 wflw_fit_arimaboost2,
                                  wflw_fit_prophet_xgboost,
+                                 wflw_fit_prophet_xgboost2,
                                  wflw_fit_svm,
+                                 wflw_fit_svm2,
                                  wflw_fit_rf,
+                                 wflw_fit_rf2,
                                  wflw_fit_nnet,
-                                 wflw_fit_mars) %>% 
-   update_model_description(1, "ARIMA(0,1,1)") %>% 
-   update_model_description(2, "PROPHET-mdl") %>% 
-   update_model_description(3, "PROPHET-wflw") %>% 
-   update_model_description(5, "PROPHET_XGBOOST") %>% 
-   update_model_description(6, "SVM-Kernlab") %>% 
-   update_model_description(7, "RandomForest") %>% 
-   update_model_description(8, "NNET") %>% 
-   update_model_description(9, "MARS") %>% 
+                                 wflw_fit_nnet2,
+                                 wflw_fit_mars,
+                                 wflw_fit_mars2,
+                                 wflw_fit_glmnet,
+                                 wflw_fit_glmnet2, 
+                                 wflw_fit_nnetar,
+                                 wflw_fit_nnetar2) %>% 
+   update_model_description(1, "ARIMA(0,1,1)(0,0,2)[7]") %>% 
+   update_model_description(2, "PROPHET") %>% 
+   update_model_description(3, "PROPHET-no_fourier") %>% 
+   update_model_description(4, "ARIMA_BOOST") %>% 
+   update_model_description(5, "ARIMA_BOOST-no_fourier") %>% 
+   update_model_description(6, "PROPHET_XGBOOST") %>% 
+   update_model_description(7, "PROPHET_XGBOOST-no_fourier") %>% 
+   update_model_description(8, "SVM-Kernlab") %>% 
+   update_model_description(9, "SVM-Kernlab-no_fourier") %>% 
+   update_model_description(10, "RandomForest") %>% 
+   update_model_description(11, "RandomForest-no_fourier") %>% 
+   update_model_description(12, "NNET") %>% 
+   update_model_description(13, "NNET-no_fourier") %>% 
+   update_model_description(14, "MARS") %>% 
+   update_model_description(15, "MARS-no_fourier") %>% 
+   update_model_description(16, "GLMNET") %>% 
+   update_model_description(17, "GLMNET-no_fourier") %>% 
+   update_model_description(18, "NNETAR") %>% 
+   update_model_description(19, "NNETAR-no_fourier") %>% 
+   modeltime_calibrate(testing(splits), quiet = F)
+
+submodels_tbl %>% modeltime_accuracy() %>% arrange(rmse) 
+
+submodels_tbl_2 <- modeltime_table(wflw_fit_prophet2,
+                                   wflw_fit_arimaboost2,
+                                   wflw_fit_prophet_xgboost2,
+                                   wflw_fit_svm2,
+                                   wflw_fit_nnetar2) %>% 
+   update_model_description(1, "PROPHET") %>% 
+   update_model_description(2, "ARIMA_BOOST") %>% 
+   update_model_description(3, "PROPHET_XGBOOST") %>% 
+   update_model_description(4, "SVM-Kernlab") %>% 
+   update_model_description(5, "NNETAR") %>% 
    modeltime_calibrate(testing(splits))
-   
-submodels_tbl %>% modeltime_accuracy() %>% arrange(rmse) #%>% 
-   #table_modeltime_accuracy(defaultPageSize = 30, bordered = TRUE, resizable = TRUE)
+
+submodels_tbl_2 %>% modeltime_accuracy() %>% arrange(rmse) 
 
 # **Plot: Models fit on testing(splits) ----
-# Remove the 2 Prophet models and plot the other 7.  
-submodels_tbl[-(2:3),] %>% 
-   modeltime_forecast(new_data = testing(splits),
-                      actual_data = filter_by_time(data_prepared_tbl, .start_date = "2018-09")) %>% 
-   plot_modeltime_forecast(.conf_interval_alpha = 0.05, .conf_interval_fill = 'skyblue', .interactive = FALSE, 
-                           .title = "Models fit on testing(splits)",
-                           .y_lab = "sales_trans") +
-   theme_dark_grey() +
-   scale_color_todd_dark()
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/models_fit_testing.jpeg",
+# Remove the 2 Prophet models and plot the other 7.  
+submodels_tbl_2 %>% 
+   modeltime_forecast(new_data    = testing(splits),
+                      actual_data = filter_by_time(data_prepared_tbl, .start_date = "2018-09")) %>% 
+   plot_modeltime_forecast(.conf_interval_alpha = 0.03, 
+                           .conf_interval_fill  = 'skyblue', 
+                           .interactive         = FALSE, 
+                           .title               = "Models fit on testing(splits)",
+                           .y_lab               = "sales_trans",
+                           .line_size           = 1) +
+   theme_dark_grey() +
+   scale_color_todd_dark_bright()
+
+ggsave(here::here("superstore","charts","submodels_tbl_best_untuned.jpeg"),
        width = 16, height = 10)
 
-
-# Move forward the the 6 best models for hyperparameter tuning. 
-submodels_tbl_best_untuned <- submodels_tbl[-(1:3),]
-submodels_tbl_best_untuned %>% 
-   write_rds("superstore_sales_dataset_predict_sales_using_time_series/models/submodels_tbl_best_untuned.rds")
-
-submodels_tbl_best_untuned <- read_rds("superstore_sales_dataset_predict_sales_using_time_series/models/submodels_tbl_best_untuned.rds")
+# Move forward the the 5 best models for hyperparameter tuning. 
 
 # -HYPERPARAMETER TUNING
 # * RESAMPLES - K-FOLD ----- 
@@ -675,13 +766,40 @@ resamples_kfold %>%
                             sales_trans, 
                             .facet_ncol = 2, 
                             .interactive = FALSE, 
-                            .title = "Cross Validation Plan", 
+                            .title = "K-fold CV Plan", 
                             .y_lab = "sales_trans") +
    theme_dark_grey() +
-   scale_color_manual(values = c("#f2f2f2", "#FF8F46"))
+   scale_color_manual(values = c("#f2f2f2", "#db0000"))
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/cv_plan.jpeg",
-       width = 16, height = 10)
+ggsave(here::here("superstore","charts","cv_plan_k_fold.jpeg"),
+       width = 16, height = 7)
+
+
+# * RESAMPLES - TSCV ----- 
+
+# Sequential models nnetar and arima_boost need time-series cross-validation.  Wont work with k-fold.
+skim(training(splits))
+
+resamples_tscv <- time_series_cv(data        = training(splits) %>% drop_na(),
+                                 cumulative  = TRUE,
+                                 assess      = "12 weeks",
+                                 skip        = '6 weeks',
+                                 slice_limit = 6)
+
+resamples_tscv %>% 
+   tk_time_series_cv_plan() %>% 
+   plot_time_series_cv_plan(order_date, 
+                            sales_trans, 
+                            .facet_ncol = 2, 
+                            .interactive = FALSE, 
+                            .title = "Time-Series CV Plan", 
+                            .y_lab = "sales_trans") +
+   theme_dark_grey() +
+   scale_color_manual(values = c("#f2f2f2", "#db0000"))
+
+ggsave(here::here("superstore","charts","cv_plan_tscv.jpeg"),
+       width = 16, height = 8)
+
 
 # * XGBOOST TUNE ----
 
@@ -870,6 +988,83 @@ wflw_fit_nnet_tuned <- wflw_spec_nnet_tune %>%
                        fit(training(splits))
 
 
+
+
+# * NNETAR ----
+
+# ** Tunable Specification
+recipe_spec_no_f_no_lag <- wflw_fit_nnetar2 %>% 
+   pull_workflow_preprocessor() %>% 
+   step_naomit(starts_with('lag'))
+
+recipe_spec_no_f_no_lag %>% prep() %>% juice() %>% glimpse()
+recipe_spec_no_fourier %>% prep() %>% juice() %>% glimpse()
+
+
+model_spec_nnetar_tune <- nnetar_reg(mode            = 'regression', 
+                                     seasonal_period = 7,
+                                     non_seasonal_ar = tune(),
+                                     seasonal_ar     = tune(), 
+                                     num_networks    = 10,
+                                     hidden_units    = tune(),
+                                     penalty         = tune(),                            
+                                     epochs          = 50) %>% 
+   set_engine('nnetar')
+
+grid_spec_nnetar_1 <- grid_latin_hypercube(parameters(model_spec_nnetar_tune),
+                                           size = 20)
+
+wflw_spec_nnetar_tune <- workflow() %>% 
+   add_model(model_spec_nnetar_tune) %>% 
+   add_recipe(recipe_spec_no_f_no_lag)
+
+# ** Tuning
+plan(strategy = cluster,
+     workers  = parallel::makeCluster(n_cores))
+
+set.seed(321)
+tune_results_nnetar <- wflw_spec_nnetar_tune %>% 
+                       tune_grid(resamples = resamples_tscv,
+                                 grid      = grid_spec_nnetar_1,
+                                 metrics   = default_forecast_accuracy_metric_set(),
+                                 control   = control_grid(verbose = TRUE))
+?tune_grid
+# ** Results
+
+tune_results_nnetar_2 %>% show_best('rmse', n = Inf)
+tune_results_nnetar %>% show_best('rsq', n = Inf)
+tune_results_nnetar %>% show_best('mase', n = Inf)
+
+# ** Finalize
+
+wflw_fit_nnetar_tuned <- wflw_spec_nnetar_tune %>% 
+   finalize_workflow(select_best(tune_results_nnetar_2, 'rsq')) %>% 
+   fit(training(splits))
+
+plan(sequential)
+
+g <- tune_results_nnetar_2 %>% autoplot +
+   geom_smooth(se = FALSE) 
+   
+plotly::ggplotly(g)
+
+set.seed(321)
+grid_spec_nnetar_2 <- grid_latin_hypercube(non_seasonal_ar(range = c(1,1)),
+                                           seasonal_ar(range = c(0,0)),
+                                           hidden_units(range = c(5,5)),
+                                           penalty(range = c(-6,-3), 
+                                                   trans = scales::log10_trans()),
+                                           size = 20)
+
+set.seed(321)
+tune_results_nnetar_2 <- wflw_spec_nnetar_tune %>% 
+   tune_grid(resamples = resamples_tscv,
+             grid      = grid_spec_nnetar_2,
+             metrics   = default_forecast_accuracy_metric_set(),
+             control   = control_grid(verbose = TRUE))
+
+plan(sequential)
+
 # * MARS TUNE ----
 
 # ** Tunable Specification
@@ -907,22 +1102,12 @@ wflw_fit_mars_tuned <- wflw_spec_mars_tune %>%
 
 # * Model Table ----
 
-submodels_2_tbl <- modeltime_table(wflw_fit_xgboost_tuned,
-                                   wflw_fit_prophet_boost_tuned,
-                                   wflw_fit_svm_tuned,
-                                   wflw_fit_rf_tuned,
-                                   wflw_fit_nnet_tuned,
-                                   wflw_fit_mars_tuned) %>% 
-                   update_model_description(1, "XGBOOST - Tuned") %>% 
-                   update_model_description(2, "PROPHET_XGBOOST - Tuned") %>% 
-                   update_model_description(3, "SVM - Tuned") %>% 
-                   update_model_description(4, "Random Forest - Tuned") %>% 
-                   update_model_description(5, "NNET - Tuned") %>% 
-                   update_model_description(6, "MARS - Tuned") 
+submodels_tuned_tbl <- modeltime_table(wflw_fit_nnetar_tuned) %>% 
+                       update_model_description(1, "NNETAR - Tuned") 
    
 # * Calibration ----
 
-calibration_tbl <- submodels_2_tbl %>% modeltime_calibrate(testing(splits))
+calibration_tbl <- submodels_tuned_tbl %>% modeltime_calibrate(testing(splits))
 
 # * Accuracy ----
 
@@ -944,7 +1129,7 @@ calibration_tbl[-c(1,6),] %>%
    theme_dark_grey() +
    scale_color_todd_dark()
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/tuned_models_fit_testing.jpeg",
+ggsave("superstore/charts/tuned_models_fit_testing.jpeg",
        width = 16, height = 10)
 
 
@@ -974,7 +1159,7 @@ refit_tbl %>%
    theme_dark_grey() +
    scale_color_todd_dark()
 
-   ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/tuned_models_forecast_inv_trans_6months.jpeg",
+   ggsave("superstore/charts/tuned_models_forecast_inv_trans_6months.jpeg",
           width = 16, height = 10)
    
 # -WEIGHTED ENSEMBLE ----   
@@ -1011,7 +1196,7 @@ refit_tbl %>%
       theme_dark_grey() +
       scale_color_manual(values = c("#fbb4ae", "#75e6da"))
 
-   ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/weight_ensemble_forecast_inv_trans_15months.jpeg",
+   ggsave("superstore/charts/weight_ensemble_forecast_inv_trans_15months.jpeg",
           width = 16, height = 10)
    
 

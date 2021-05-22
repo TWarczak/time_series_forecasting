@@ -15,7 +15,7 @@ library(skimr)
 
 
 # - Import Data ----
-df <- read_csv("superstore_sales_dataset_predict_sales_using_time_series/data/train.csv")
+df <- read_csv("superstore/data/train.csv")
 
 # - Exploratory Data Analysis ----
 
@@ -71,7 +71,7 @@ ggplot(q, aes(reorder_within(state, orders, region, sep = ""), orders, fill = re
              color="white", size=3.5, fontface = 'bold', 
              hjust = -0.2, vjust = 0.4)
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/orders_by_state_region.jpeg",
+ggsave("superstore/charts/orders_by_state_region.jpeg",
        width = 18.5, height = 12.5)
 
 # **Plot: Sales by State/Region ----
@@ -95,7 +95,7 @@ ggplot(q, aes(reorder_within(state, sales, region, sep = ""), sales, fill = regi
              color="white", size=3.5, fontface = 'bold', 
              hjust = -0.1, vjust = 0.4)
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/sales_by_state_region2.jpeg",
+ggsave("superstore/charts/sales_by_state_region2.jpeg",
        width = 18.5, height = 12.5)
 
 
@@ -134,7 +134,7 @@ ggplot(z, aes(category, percent, fill = segment)) +
    labs(title = "Order & Sale Percentage by Category/Segment",
         x = element_blank()) 
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/orders&sale_pct_by_category_segment.jpeg",
+ggsave("superstore/charts/orders&sale_pct_by_category_segment.jpeg",
        width = 14.5, height = 8.5)
 
 
@@ -164,7 +164,7 @@ ggplot(x, aes(log(sales), orders, color = category)) +
    geom_text(data=seth_vernon ,aes(x=6.5,y=15), 
              label="Seth Vernon\n15 Orders\nTotal = $8,332",size=3.5, show.legend = F, color = 'white', alpha = 0.7)
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/orders&sales_per_customer_by_category_segment.jpeg",
+ggsave("superstore/charts/orders&sales_per_customer_by_category_segment.jpeg",
        width = 16, height = 10)
 
 # Outliers aren't that extreme.   
@@ -190,7 +190,7 @@ sales_daily_tbl %>%
    theme_dark_grey() + 
    scale_color_todd_dark()
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/daily_total_sales.jpeg",
+ggsave("superstore/charts/daily_total_sales.jpeg",
        width = 16, height = 10)
 
 # -MISSING DATA ----
@@ -246,7 +246,7 @@ sales_daily_pad_trans_tbl %>%
    theme_dark_grey() + 
    scale_color_todd_dark()
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/daily_sales_pad_trans.jpeg",
+ggsave("superstore/charts/daily_sales_pad_trans.jpeg",
        width = 16, height = 10)
 
 # -FOURIER SERIES, LAGS, ROLLING LAGS ----
@@ -266,7 +266,7 @@ sales_daily_pad_trans_tbl %>%
 lag_labels <- data.frame(name = c("ACF","ACF","ACF","ACF","ACF","PACF","PACF","PACF","PACF"), 
                          label = c('7','14','21','28','357','7','14','21','28'))
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/acf_pacf.jpeg",
+ggsave("superstore/charts/acf_pacf.jpeg",
        width = 16, height = 10)
 
 # Clearly there is a strong weekly correlation of sales vs sales 7d, 14d, 21d, ... later.   
@@ -306,9 +306,9 @@ full_data_prepared_tbl <- sales_daily_pad_trans_tbl %>%
                .fn   = ~ str_c('fourier_', .))
 
 full_data_prepared_tbl %>% 
-   write_rds("superstore_sales_dataset_predict_sales_using_time_series/data/full_data_prepared_tbl.rds")
+   write_rds("superstore/data/full_data_prepared_tbl.rds")
 
-full_data_prepared_tbl <- read_rds("superstore_sales_dataset_predict_sales_using_time_series/data/full_data_prepared_tbl.rds")
+full_data_prepared_tbl <- read_rds("superstore/data/full_data_prepared_tbl.rds")
 
 glimpse(full_data_prepared_tbl)
 
@@ -360,7 +360,7 @@ splits %>%
    theme_dark_grey() + 
    scale_color_todd_dark()
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/cv_splits.jpeg",
+ggsave("superstore/charts/cv_splits.jpeg",
        width = 16, height = 10)
 
 
@@ -378,9 +378,9 @@ recipe_spec <- recipe(sales_trans ~ ., data = training(splits)) %>%
 recipe_spec %>% prep() %>% juice() %>% glimpse()
 
 recipe_spec %>% 
-   write_rds("superstore_sales_dataset_predict_sales_using_time_series/data/recipe_spec.rds")
+   write_rds("superstore/data/recipe_spec.rds")
 
-recipe_spec <- read_rds("superstore_sales_dataset_predict_sales_using_time_series/data/recipe_spec.rds")
+recipe_spec <- read_rds("superstore/data/recipe_spec.rds")
 
 # -Models ----
 
@@ -394,6 +394,7 @@ doFuture::registerDoFuture()
 n_cores <- parallel::detectCores()
 plan(strategy = cluster,
      workers  = parallel::makeCluster(n_cores))
+plan(sequential)
 
 
 # model_fit_1_arima_basic <- arima_reg() %>% 
@@ -652,16 +653,16 @@ submodels_tbl[-(2:3),] %>%
    theme_dark_grey() +
    scale_color_todd_dark()
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/models_fit_testing.jpeg",
+ggsave("superstore/charts/models_fit_testing.jpeg",
        width = 16, height = 10)
 
 
 # Move forward the the 6 best models for hyperparameter tuning. 
 submodels_tbl_best_untuned <- submodels_tbl[-(1:3),]
 submodels_tbl_best_untuned %>% 
-   write_rds("superstore_sales_dataset_predict_sales_using_time_series/models/submodels_tbl_best_untuned.rds")
+   write_rds("superstore/models/submodels_tbl_best_untuned.rds")
 
-submodels_tbl_best_untuned <- read_rds("superstore_sales_dataset_predict_sales_using_time_series/models/submodels_tbl_best_untuned.rds")
+submodels_tbl_best_untuned <- read_rds("superstore/models/submodels_tbl_best_untuned.rds")
 
 # -HYPERPARAMETER TUNING
 # * RESAMPLES - K-FOLD ----- 
@@ -680,7 +681,7 @@ resamples_kfold %>%
    theme_dark_grey() +
    scale_color_manual(values = c("#f2f2f2", "#FF8F46"))
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/cv_plan.jpeg",
+ggsave("superstore/charts/cv_plan.jpeg",
        width = 16, height = 10)
 
 # * XGBOOST TUNE ----
@@ -944,7 +945,7 @@ calibration_tbl[-c(1,6),] %>%
    theme_dark_grey() +
    scale_color_todd_dark()
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/tuned_models_fit_testing.jpeg",
+ggsave("superstore/charts/tuned_models_fit_testing.jpeg",
        width = 16, height = 10)
 
 
@@ -974,7 +975,7 @@ refit_tbl %>%
    theme_dark_grey() +
    scale_color_todd_dark()
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/tuned_models_forecast_inv_trans_6months.jpeg",
+ggsave("superstore/charts/tuned_models_forecast_inv_trans_6months.jpeg",
        width = 16, height = 10)
 
 # -WEIGHTED ENSEMBLE ----   
@@ -1011,7 +1012,7 @@ refit_weight_tbl %>%
    theme_dark_grey() +
    scale_color_manual(values = c("#fbb4ae", "#75e6da"))
 
-ggsave("superstore_sales_dataset_predict_sales_using_time_series/charts/weight_ensemble_forecast_inv_trans_15months.jpeg",
+ggsave("superstore/charts/weight_ensemble_forecast_inv_trans_15months.jpeg",
        width = 16, height = 10)
 
 

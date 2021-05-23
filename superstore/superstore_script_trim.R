@@ -1,14 +1,10 @@
 # - Libraries ---- 
 library(tidyverse)
-library(lubridate)
-library(tidytext)
 library(tidymodels)
 library(modeltime)
 library(modeltime.ensemble)
 library(modeltime.resample)
-library(ggthemes)
 library(timetk)
-library(xts)
 library(DataExplorer)
 library(skimr)
 library(doFuture)
@@ -18,7 +14,7 @@ plan(strategy = cluster,
      workers  = parallel::makeCluster(n_cores))
 plan(sequential)
 
-
+?ggthemes
 # - Import Data ----
 df <- read_csv("superstore/data/train.csv")
 
@@ -69,7 +65,7 @@ data_clean_tbl <- janitor::clean_names(df) %>%
 #    scale_y_continuous(limits = c(0,2000), expand = c(0,0)) +
 #    theme_dark_grey() + 
 #    scale_color_todd_dark_subtle() + 
-#    scale_fill_todd_dark_subtle() +
+#    scale_fill_todd_dark() +
 #    theme(panel.grid.major.y = element_blank(),
 #          panel.grid.major.x = element_blank()) +
 #    geom_hline(yintercept = c(500,1000,1500), 
@@ -97,7 +93,7 @@ data_clean_tbl <- janitor::clean_names(df) %>%
 #    scale_y_continuous(limits = c(0,500000), expand = c(0,0), labels=dollar_format(prefix="$")) +
 #    theme_dark_grey() + 
 #    scale_color_todd_dark_subtle() + 
-#    scale_fill_todd_dark_subtle() +
+#    scale_fill_todd_dark() +
 #    theme(panel.grid.major.y = element_blank(),
 #          panel.grid.major.x = element_blank()) +
 #    geom_hline(yintercept = c(100000,200000,300000,400000), 
@@ -1238,8 +1234,8 @@ refit_tbl %>%
    # * Calibration ----
    calibration_tbl %>% modeltime_accuracy() %>% arrange(rmse) 
    
-   weight_ensemble_tbl <- calibration_tbl[-c(1,6),] %>%  
-                          ensemble_weighted(loadings = c(2,5,2,2)) %>% 
+   weight_ensemble_tbl <- calibration_tbl %>%  
+                          ensemble_weighted(loadings = c(1,1,1)) %>% 
                           modeltime_table()
    
    weight_ensemble_tbl %>% modeltime_accuracy(testing(splits))
@@ -1257,19 +1253,19 @@ refit_tbl %>%
                                                           limit_lower = limit_lower,
                                                           limit_upper = limit_upper,
                                                           offset      = offset))) %>% 
-      filter_by_time(.start_date = '2018' ) %>% 
+      #filter_by_time(.start_date = '2018') %>% 
       plot_modeltime_forecast(.conf_interval_alpha = 0.05, 
                               .conf_interval_fill  = 'skyblue', 
                               .interactive         = FALSE, 
                               .title               = "Weighted Ensemble Forecast", 
                               .y_lab               = "Daily Sales ($)",
-                              .line_size           = 1) +
+                              .line_size           = 0.6) +
       theme_dark_grey() +
       scale_color_manual(values = c("#fbb4ae", "#75e6da"))
 
-   ggsave("superstore/charts/weight_ensemble_forecast_inv_trans_15months.jpeg",
-          width = 16, height = 10)
-   
+   ggsave("superstore/charts/weight_ensemble_forecast_inv_trans_full.jpeg",
+          width = 16, height = 8)
+      
 
 
 

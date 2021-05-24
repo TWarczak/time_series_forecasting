@@ -61,7 +61,7 @@ colors_todd <- c("#922B21", "#EE865D", "#DDCD5E", "#59BEC4", "#048B9F", "#114676
                  "#fbb4ae","#b3cde3","#ccebc5","#decbe4","#fed9a6","#ffffcc","#e5d8bd",
                  "#fddaec","#f2f2f2", "#81B622", '#94C973', '#2F5233', '#B1D8B7', '#76B947',
                  '#D4F1F4' , '#75E6DA', "#189AB4", "#05445E", "#a86cc1",
-                 "#06a0b0","#2371bb","#9de25f","#d708fb","#9c278f")
+                 "#06a0b0","#2371bb","#9de25f","#d708fb","#9c278f", "#0099ff", "#66ff99", "#ffffcc")
 show_col(colors_todd, labels = T, borders = NA)
 
 

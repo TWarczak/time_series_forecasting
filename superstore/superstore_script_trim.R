@@ -14,7 +14,7 @@ plan(strategy = cluster,
      workers  = parallel::makeCluster(n_cores))
 plan(sequential)
 
-?ggthemes
+?tidyverse
 # - Import Data ----
 df <- read_csv("superstore/data/train.csv")
 
@@ -661,7 +661,7 @@ wflw_fit_svm2 <- workflow() %>%
 # 
 # # * NNETAR ----
 # 
-# # Multiple Adaptive Regression Splines
+# # Combines Auto-Regressive features with Neural Net Regression
 # 
 # wflw_fit_nnetar <- workflow() %>% 
 #    add_model(nnetar_reg() %>% 
